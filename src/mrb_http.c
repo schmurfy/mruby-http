@@ -25,6 +25,7 @@ typedef struct {
   struct http_parser_settings settings;
   int was_header_value;
   mrb_value instance;
+  mrb_value on_body_block;
 } mrb_http_parser_context;
 
 static void
@@ -139,6 +140,12 @@ parser_settings_on_body(http_parser *parser, const char *p, size_t len)
 
   int ai = mrb_gc_arena_save(mrb);
   OBJECT_SET(mrb, context->instance, "body", mrb_str_new(mrb, p, len));
+  
+  if( !mrb_nil_p(context->on_body_block) ) {
+    mrb_value body = mrb_str_new(mrb, p, len);
+    mrb_yield(mrb, context->on_body_block, body);
+  }
+  
   mrb_gc_arena_restore(mrb, ai);
   return 0;
 }
@@ -186,6 +193,54 @@ parser_settings_on_message_complete(http_parser* parser)
   OBJECT_REMOVE(mrb, c, "buf");
 
   return 0;
+}
+
+static int
+chunk_parser_settings_on_body(http_parser *parser, const char *p, size_t len)
+{
+  mrb_http_parser_context *context = (mrb_http_parser_context*) parser->data;
+  mrb_state* mrb = context->mrb;
+  
+  int ai = mrb_gc_arena_save(mrb);
+  
+  mrb_value body = mrb_str_new(mrb, p, len);
+  mrb_yield(mrb, context->on_body_block, body);
+  
+  mrb_gc_arena_restore(mrb, ai);
+  return 0;
+}
+
+static mrb_value
+mrb_http_chunk_parser_init(mrb_state *mrb, mrb_value self)
+{
+  mrb_http_parser_context* context = NULL;
+
+  context = (mrb_http_parser_context*) malloc(sizeof(mrb_http_parser_context));
+  memset(context, 0, sizeof(mrb_http_parser_context));
+  context->mrb = mrb;
+  context->instance = mrb_nil_value();
+  mrb_iv_set(mrb, self, mrb_intern_cstr(mrb, "context"), mrb_obj_value(
+      Data_Wrap_Struct(mrb, mrb->object_class,
+      &http_parser_context_type,
+      (void*) context)
+    ));
+  
+  mrb_get_args(mrb, "&", &context->on_body_block);
+  if( mrb_nil_p(context->on_body_block) ){
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid block");
+    return self;
+  }
+  
+  // make sure the block will not be garbage collected
+  mrb_iv_set(mrb, self, mrb_intern_cstr(mrb, "on_body_block"), context->on_body_block);
+
+  
+  http_parser_init(&context->parser, HTTP_RESPONSE);
+  context->type = HTTP_RESPONSE;
+  context->settings.on_body = chunk_parser_settings_on_body;
+  context->parser.data = context;
+  
+  return self;
 }
 
 static mrb_value
@@ -625,12 +680,17 @@ mrb_mruby_http_gem_init(mrb_state* mrb) {
 
   struct RClass* _class_http;
   struct RClass* _class_http_parser;
+  struct RClass* _class_http_chunk_parser;
   struct RClass* _class_http_request;
   struct RClass* _class_http_response;
   struct RClass *_class_http_url;
   int ai = mrb_gc_arena_save(mrb);
 
   _class_http = mrb_define_module(mrb, "HTTP");
+  _class_http_chunk_parser = mrb_define_class_under(mrb, _class_http, "ChunkParser", mrb->object_class);
+  mrb_define_method(mrb, _class_http_chunk_parser, "initialize", mrb_http_chunk_parser_init, MRB_ARGS_OPT(1));
+  mrb_define_method(mrb, _class_http_chunk_parser, "execute", mrb_http_parser_execute, MRB_ARGS_REQ(1));
+  
   _class_http_parser = mrb_define_class_under(mrb, _class_http, "Parser", mrb->object_class);
   mrb_define_method(mrb, _class_http_parser, "initialize", mrb_http_parser_init, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, _class_http_parser, "parse_request", mrb_http_parser_parse_request, MRB_ARGS_OPT(2));
