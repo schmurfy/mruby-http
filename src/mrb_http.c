@@ -39,15 +39,15 @@ http_parser_context_type = {
   "mrb_http_parser_context", http_parser_context_free,
 };
 
-static void
-http_url_free(mrb_state *mrb, void *p)
-{
-  free(p);
-}
+// static void
+// http_url_free(mrb_state *mrb, void *p)
+// {
+//   free(p);
+// }
 
-static const struct mrb_data_type http_url_type = {
-  "mrb_http_url", http_url_free,
-};
+// static const struct mrb_data_type http_url_type = {
+//   "mrb_http_url", http_url_free,
+// };
 
 static int
 parser_settings_on_url(http_parser* parser, const char *at, size_t len)
@@ -541,14 +541,14 @@ mrb_http_object_headers_get(mrb_state *mrb, mrb_value self)
   return OBJECT_GET(mrb, self, "headers");
 }
 
-static mrb_value
-mrb_http_object_headers_set_item(mrb_state *mrb, mrb_value self)
-{
-  mrb_value key, value;
-  mrb_get_args(mrb, "SS", &key, &value);
-  mrb_hash_set(mrb, OBJECT_GET(mrb, self, "headers"), key, value);
-  return mrb_nil_value();
-}
+// static mrb_value
+// mrb_http_object_headers_set_item(mrb_state *mrb, mrb_value self)
+// {
+//   mrb_value key, value;
+//   mrb_get_args(mrb, "SS", &key, &value);
+//   mrb_hash_set(mrb, OBJECT_GET(mrb, self, "headers"), key, value);
+//   return mrb_nil_value();
+// }
 
 static mrb_value
 mrb_http_object_method_get(mrb_state *mrb, mrb_value self)
